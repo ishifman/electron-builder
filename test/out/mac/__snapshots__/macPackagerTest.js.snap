@@ -9,6 +9,19 @@ Object {
       "arch": "x64",
       "file": "Test App ßW-1.1.0.dmg",
       "safeArtifactName": "TestApp-1.1.0.dmg",
+      "updateInfo": Object {
+        "sha512": "@sha512",
+        "size": "@size",
+      },
+    },
+    Object {
+      "arch": "x64",
+      "file": "Test App ßW-1.1.0.dmg.blockmap",
+      "safeArtifactName": "TestApp-1.1.0.dmg.blockmap",
+      "updateInfo": Object {
+        "sha512": "@sha512",
+        "size": "@size",
+      },
     },
     Object {
       "file": "latest-mac.json",
@@ -16,8 +29,16 @@ Object {
     Object {
       "file": "latest-mac.yml",
       "fileContent": Object {
-        "path": "Test App ßW-1.1.0-mac.zip",
-        "url": "Test App ßW-1.1.0-mac.zip",
+        "files": Array [
+          Object {
+            "sha512": "@sha512",
+            "size": "@size",
+            "url": "Test App ßW-1.1.0.dmg",
+          },
+        ],
+        "path": "Test App ßW-1.1.0.dmg",
+        "releaseDate": "@releaseDate",
+        "sha512": "@sha512",
         "version": "1.1.0",
       },
     },
@@ -97,16 +118,33 @@ Object {
     Object {
       "arch": "x64",
       "file": "TestApp-1.1.0-mac.dmg",
+      "updateInfo": Object {
+        "sha512": "@sha512",
+        "size": "@size",
+      },
     },
     Object {
-      "file": "latest-mac.json",
+      "arch": "x64",
+      "file": "TestApp-1.1.0-mac.dmg.blockmap",
+      "safeArtifactName": "null.blockmap",
+      "updateInfo": Object {
+        "sha512": "@sha512",
+        "size": "@size",
+      },
     },
     Object {
       "file": "latest-mac.yml",
       "fileContent": Object {
-        "githubArtifactName": "TestApp-1.1.0-mac.zip",
-        "path": "TestApp-1.1.0-mac.zip",
-        "url": "TestApp-1.1.0-mac.zip",
+        "files": Array [
+          Object {
+            "sha512": "@sha512",
+            "size": "@size",
+            "url": "TestApp-1.1.0-mac.dmg",
+          },
+        ],
+        "path": "TestApp-1.1.0-mac.dmg",
+        "releaseDate": "@releaseDate",
+        "sha512": "@sha512",
         "version": "1.1.0",
       },
     },

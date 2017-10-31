@@ -1,5 +1,5 @@
 import BluebirdPromise from "bluebird-lst"
-import { Arch, asArray, AsyncTaskManager, isEmptyOrSpaces, isPullRequest, log, safeStringifyJson, warn } from "builder-util"
+import { Arch, asArray, AsyncTaskManager, isEmptyOrSpaces, isPullRequest, log, safeStringifyJson, warn, serializeToYaml } from "builder-util"
 import { BintrayOptions, CancellationToken, GenericServerOptions, getS3LikeProviderBaseUrl, GithubOptions, githubUrl, PublishConfiguration, PublishProvider } from "builder-util-runtime"
 import _debug from "debug"
 import { getCiTag, PublishContext, Publisher, PublishOptions } from "electron-publish"
@@ -8,7 +8,6 @@ import { GitHubPublisher } from "electron-publish/out/gitHubPublisher"
 import { MultiProgress } from "electron-publish/out/multiProgress"
 import { writeFile } from "fs-extra-p"
 import isCi from "is-ci"
-import { safeDump } from "js-yaml"
 import * as path from "path"
 import { WriteStream as TtyWriteStream } from "tty"
 import * as url from "url"
@@ -71,12 +70,12 @@ export class PublishManager implements PublishContext {
     packager.addAfterPackHandler(async event => {
       const packager = event.packager
       if (event.electronPlatformName === "darwin") {
-        if (!event.targets.some(it => it.name === "zip")) {
+        if (!event.targets.some(it => it.name === "dmg")) {
           return
         }
       }
       else if (packager.platform === Platform.WINDOWS) {
-        if (!event.targets.some(it => isSuitableWindowsTarget(it, null))) {
+        if (!event.targets.some(it => isSuitableWindowsTarget(it))) {
           return
         }
       }
@@ -86,7 +85,7 @@ export class PublishManager implements PublishContext {
 
       const publishConfig = await getAppUpdatePublishConfiguration(packager, event.arch)
       if (publishConfig != null) {
-        await writeFile(path.join(packager.getResourcesDir(event.appOutDir), "app-update.yml"), safeDump(publishConfig))
+        await writeFile(path.join(packager.getResourcesDir(event.appOutDir), "app-update.yml"), serializeToYaml(publishConfig))
       }
     })
 
@@ -131,10 +130,8 @@ export class PublishManager implements PublishContext {
       }
     }
 
-    if (target != null && eventFile != null && !this.cancellationToken.cancelled) {
-      if ((packager.platform === Platform.MAC && target.name === "zip") ||
-        (packager.platform === Platform.WINDOWS && isSuitableWindowsTarget(target, event)) ||
-        (packager.platform === Platform.LINUX && event.isWriteUpdateInfo)) {
+    if (event.isWriteUpdateInfo && target != null && eventFile != null && !this.cancellationToken.cancelled) {
+      if (packager.platform !== Platform.WINDOWS || isSuitableWindowsTarget(target)) {
         this.taskManager.addTask(writeUpdateInfo(event, publishConfigs).then(it => this.postponedArtifactCreatedEvents.push(...it)))
       }
     }
@@ -157,20 +154,16 @@ export class PublishManager implements PublishContext {
     this.nameToPublisher.clear()
   }
 
-  // noinspection InfiniteRecursionJS
   async awaitTasks(): Promise<void> {
     await this.taskManager.awaitTasks()
-    if (!this.cancellationToken.cancelled) {
-      if (this.postponedArtifactCreatedEvents.length === 0) {
-        return
-      }
 
+    while (!this.cancellationToken.cancelled && this.postponedArtifactCreatedEvents.length > 0) {
       const events = this.postponedArtifactCreatedEvents.slice()
       this.postponedArtifactCreatedEvents.length = 0
       for (const event of events) {
         this.packager.dispatchArtifactCreated(event)
       }
-      await this.awaitTasks()
+      await this.taskManager.awaitTasks()
     }
   }
 }
@@ -334,11 +327,7 @@ export async function getPublishConfigs(packager: PlatformPackager<any>, targetS
   return await (BluebirdPromise.map(asArray(publishers), it => getResolvedPublishConfig(packager, typeof it === "string" ? {provider: it} : it, arch)) as Promise<Array<PublishConfiguration>>)
 }
 
-function isSuitableWindowsTarget(target: Target, event: ArtifactCreated | null) {
-  if (event != null && !event.isWriteUpdateInfo) {
-    return false
-  }
-
+function isSuitableWindowsTarget(target: Target) {
   if (target.name === "appx" && target.options != null && (target.options as any).electronUpdaterAware) {
     return true
   }
@@ -363,11 +352,11 @@ function isDetectUpdateChannel(packager: PlatformPackager<any>) {
 }
 
 async function getResolvedPublishConfig(packager: PlatformPackager<any>, options: PublishConfiguration, arch: Arch | null, errorIfCannot: boolean = true): Promise<PublishConfiguration | GithubOptions | BintrayOptions | null> {
-  options = Object.assign(Object.create(null), options)
+  options = {...options}
   expandPublishConfig(options, packager, arch)
 
   let channelFromAppVersion: string | null = null
-  if ((options as any).channel == null && isDetectUpdateChannel(packager)) {
+  if ((options as GenericServerOptions).channel == null && isDetectUpdateChannel(packager)) {
     channelFromAppVersion = packager.appInfo.channel
   }
 
@@ -442,9 +431,11 @@ async function getResolvedPublishConfig(packager: PlatformPackager<any>, options
     if ((options as GithubOptions).token != null && !(options as GithubOptions).private) {
       warn('"token" specified in the github publish options. It should be used only for [setFeedURL](module:electron-updater/out/AppUpdater.AppUpdater+setFeedURL).')
     }
-    return {owner, repo: project, ...options}
+    //tslint:disable-next-line:no-object-literal-type-assertion
+    return {owner, repo: project, ...options} as GithubOptions
   }
   else {
-    return {owner, package: project, ...options}
+    //tslint:disable-next-line:no-object-literal-type-assertion
+    return {owner, package: project, ...options} as BintrayOptions
   }
 }

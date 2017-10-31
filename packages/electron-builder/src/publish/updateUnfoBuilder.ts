@@ -1,7 +1,6 @@
-import { hashFile, Arch } from "builder-util"
+import { hashFile, Arch, serializeToYaml } from "builder-util"
 import { GenericServerOptions, PublishConfiguration, UpdateInfo, GithubOptions, WindowsUpdateInfo } from "builder-util-runtime"
 import { outputFile, outputJson, readFile } from "fs-extra-p"
-import { safeDump } from "js-yaml"
 import { Lazy } from "lazy-val"
 import * as path from "path"
 import { ReleaseInfo } from "../configuration"
@@ -9,6 +8,8 @@ import { Platform } from "../core"
 import { ArtifactCreated } from "../packagerApi"
 import { PlatformPackager } from "../platformPackager"
 import { computeDownloadUrl, getPublishConfigsForUpdateInfo } from "./PublishManager"
+import * as semver from "semver"
+import { MacConfiguration } from "../"
 
 async function getReleaseInfo(packager: PlatformPackager<any>) {
   const releaseInfo: ReleaseInfo = {...(packager.platformSpecificBuildOptions.releaseInfo || packager.config.releaseInfo)}
@@ -74,6 +75,7 @@ export async function writeUpdateInfo(event: ArtifactCreated, _publishConfigs: A
   const createdFiles = new Set<string>()
   const sharedInfo = await createUpdateInfo(version, event, await getReleaseInfo(packager))
   const events: Array<ArtifactCreated> = []
+  const electronUpdaterCompatibility = event.packager.platform === Platform.MAC ? (event.packager.platformSpecificBuildOptions as MacConfiguration).electronUpdaterCompatibility : null
   for (let publishConfig of publishConfigs) {
     if (publishConfig.provider === "github" && "releaseType" in publishConfig) {
       publishConfig = {...publishConfig}
@@ -86,7 +88,7 @@ export async function writeUpdateInfo(event: ArtifactCreated, _publishConfigs: A
     }
 
     // spaces is a new publish provider, no need to keep backward compatibility
-    let isElectronUpdater1xCompatibility = publishConfig.provider !== "spaces"
+    let isElectronUpdater1xCompatibility = publishConfig.provider !== "spaces" && (electronUpdaterCompatibility == null || semver.satisfies("1.0.0", electronUpdaterCompatibility))
 
     let info = sharedInfo
     // noinspection JSDeprecatedSymbols
@@ -98,9 +100,11 @@ export async function writeUpdateInfo(event: ArtifactCreated, _publishConfigs: A
     }
 
     if (event.safeArtifactName != null && publishConfig.provider === "github") {
+      const newFiles = info.files.slice()
+      newFiles[0].url = event.safeArtifactName
       info = {
         ...info,
-        url: event.safeArtifactName,
+        files: newFiles,
         path: event.safeArtifactName,
       }
     }
@@ -119,7 +123,7 @@ export async function writeUpdateInfo(event: ArtifactCreated, _publishConfigs: A
 
       createdFiles.add(updateInfoFile)
 
-      const fileContent = Buffer.from(safeDump(info))
+      const fileContent = Buffer.from(serializeToYaml(info))
       await outputFile(updateInfoFile, fileContent)
 
       // artifact should be uploaded only to designated publish provider
@@ -136,18 +140,25 @@ export async function writeUpdateInfo(event: ArtifactCreated, _publishConfigs: A
   return events
 }
 
-async function createUpdateInfo(version: string, event: ArtifactCreated, releaseInfo: ReleaseInfo) {
+async function createUpdateInfo(version: string, event: ArtifactCreated, releaseInfo: ReleaseInfo): Promise<UpdateInfo> {
   const customUpdateInfo = event.updateInfo
   const url = path.basename(event.file!)
-  return {
+  const sha512 = (customUpdateInfo == null ? null : customUpdateInfo.sha512) || await hashFile(event.file!)
+  const files = [{url, sha512}]
+  const result: UpdateInfo = {
     version,
     releaseDate: new Date().toISOString(),
-    path: url,
-    url,
-    ...customUpdateInfo,
-    sha512: (customUpdateInfo == null ? null : customUpdateInfo.sha512) || await hashFile(event.file!),
+    files,
+    path: url /* backward compatibility, electron-updater 1.x - electron-updater 2.15.0 */,
+    sha512 /* backward compatibility, electron-updater 1.x - electron-updater 2.15.0 */,
     ...releaseInfo as UpdateInfo,
   }
+
+  if (customUpdateInfo != null) {
+    // file info or nsis web installer packages info
+    Object.assign("sha512" in customUpdateInfo ? files[0] : result, customUpdateInfo)
+  }
+  return result
 }
 
 // backward compatibility - write json file

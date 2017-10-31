@@ -1,6 +1,6 @@
 import * as path from "path"
-import { SpawnOptions } from "child_process"
-import { DebugLogger, exec, ExecOptions, ExtraSpawnOptions, spawn } from "builder-util"
+import { SpawnOptions, ExecFileOptions } from "child_process"
+import { DebugLogger, exec, ExtraSpawnOptions, spawn } from "builder-util"
 import { ParallelsVmManager, parseVmList } from "./parallels"
 
 export class VmManager {
@@ -8,7 +8,7 @@ export class VmManager {
     return path.sep
   }
 
-  exec(file: string, args: Array<string>, options?: ExecOptions, isLogOutIfDebug = true): Promise<string> {
+  exec(file: string, args: Array<string>, options?: ExecFileOptions, isLogOutIfDebug = true): Promise<string> {
     return exec(file, args, options, isLogOutIfDebug)
   }
 

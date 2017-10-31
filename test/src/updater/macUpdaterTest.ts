@@ -3,6 +3,7 @@ import { httpExecutor } from "builder-util/out/nodeHttpExecutor"
 import { MacUpdater } from "electron-updater/out/MacUpdater"
 import { EventEmitter } from "events"
 import { createTestApp, trackEvents, tuneNsisUpdater, writeUpdateConfig } from "../helpers/updaterTestUtil"
+import { removeUnstableProperties } from "../helpers/packTester"
 
 class TestNativeUpdater extends EventEmitter {
   private updateUrl: string | null = null
@@ -55,7 +56,7 @@ test.ifAll.ifNotCi.ifMac("mac updates", async () => {
   const actualEvents = trackEvents(updater)
 
   const updateCheckResult = await updater.checkForUpdates()
-  expect(updateCheckResult.fileInfo!!.sha512).toBeDefined()
+  expect(removeUnstableProperties(updateCheckResult.updateInfo.files)).toMatchSnapshot()
   expect(await updateCheckResult.downloadPromise).toEqual([])
   expect(actualEvents).toMatchSnapshot()
 })
